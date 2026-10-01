@@ -1,0 +1,41 @@
+name: Build Latest OpenClaw Android
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout latest OpenClaw main
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: main
+
+      - name: Setup Node environment
+        uses: ./.github/actions/setup-node-env
+        with:
+          cache-mode: read-write
+          install-bun: "true"
+
+      - name: Setup Android toolchain
+        uses: ./.github/actions/setup-android-toolchain
+        with:
+          cache-mode: read-write
+
+      - name: Build Android APK
+        run: pnpm android:assemble
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenClaw-Android-Latest
+          path: apps/android/app/build/outputs/apk/play/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
