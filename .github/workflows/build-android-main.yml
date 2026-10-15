@@ -1,0 +1,73 @@
+name: Build OpenClaw Android 2026.10.10 Beta 1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout 10.10 rebased fork
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify upstream base and package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "87175a8e989c7b7197d085d155c9e7b04c001da8"
+          node -e "if (require('./package.json').version !== '2026.10.10-beta.1') process.exit(1)"
+          echo "Verified OpenClaw v2026.10.10-beta.1 upstream base"
+
+      - name: Setup Node environment
+        uses: ./.github/actions/setup-node-env
+        with:
+          cache-mode: read-write
+          install-bun: "true"
+
+      - name: Setup Android toolchain
+        uses: ./.github/actions/setup-android-toolchain
+        with:
+          cache-mode: read-write
+
+      - name: Pin Android version to 2026.10.10
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --import ./scripts/tsx.mjs scripts/android-pin-version.ts --from-gateway
+          node -e "const v=require('./apps/android/version.json');if(v.version!=='2026.10.10'||v.versionCode!==2026101001)throw Error(JSON.stringify(v))"
+          cat apps/android/version.json
+
+      - name: Assemble Android debug APK
+        run: pnpm android:assemble
+
+      - name: Verify APK package and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(apps/android/app/build/outputs/apk/play/debug/*.apk)
+          test "${#apks[@]}" -gt 0
+          mkdir -p apk-output
+          for apk in "${apks[@]}"; do
+            "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$apk" | grep "^package: name='ai.openclaw.app.debug' "
+            "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$apk" | grep "versionCode='2026101001'"
+            sha256sum "$apk" | tee -a apk-output/SHA256SUMS.txt
+            ls -lh "$apk"
+          done
+
+      - name: Upload versioned APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenClaw-Android-2026.10.10-beta.1
+          path: |
+            apps/android/app/build/outputs/apk/play/debug/*.apk
+            apk-output/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
