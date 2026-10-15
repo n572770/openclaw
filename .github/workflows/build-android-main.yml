@@ -16,12 +16,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Verify upstream base and package version
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "87175a8e989c7b7197d085d155c9e7b04c001da8"
+          git merge-base --is-ancestor "87175a8e989c7b7197d085d155c9e7b04c001da8" HEAD
           node -e "if (require('./package.json').version !== '2026.10.10-beta.1') process.exit(1)"
           echo "Verified OpenClaw v2026.10.10-beta.1 upstream base"
 
