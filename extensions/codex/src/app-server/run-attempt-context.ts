@@ -23,11 +23,12 @@ import {
 } from "./context-engine-projection.js";
 import { joinPresentSections } from "./developer-instruction-sections.js";
 import { isSystemAgentOnlyCodexDynamicToolAllowlist } from "./dynamic-tool-profile.js";
-import type { JsonValue } from "./protocol.js";
+import type { JsonObject, JsonValue } from "./protocol.js";
 import type { CodexAttemptRuntime } from "./run-attempt-runtime.js";
 import type { CodexAttemptTools } from "./run-attempt-tool-setup.js";
 import type { CodexContextEngineThreadBootstrapProjection } from "./thread-context-engine.js";
 import { buildDeveloperInstructions } from "./thread-prompt.js";
+import { buildCodexRuntimeThreadConfigForRun } from "./thread-requests.js";
 
 export async function prepareCodexAttemptContext(
   runtime: CodexAttemptRuntime,
@@ -203,6 +204,15 @@ export async function prepareCodexAttemptContext(
       nativeCodeModeEnabled: runtime.nativeToolSurfaceEnabled,
       nativeCodeModeOnlyEnabled:
         runtime.nativeToolSurfaceEnabled && connection.appServer.codeModeOnly,
+      nativeCollaborationConfig: buildCodexRuntimeThreadConfigForRun(
+        runtimeParams,
+        runtime.bundleMcpThreadConfig.configPatch as JsonObject | undefined,
+        {
+          nativeCodeModeEnabled: runtime.nativeToolSurfaceEnabled,
+          nativeCodeModeOnlyEnabled:
+            runtime.nativeToolSurfaceEnabled && connection.appServer.codeModeOnly,
+        },
+      ),
     }),
     agentWorkspaceDeveloperInstructions,
   );

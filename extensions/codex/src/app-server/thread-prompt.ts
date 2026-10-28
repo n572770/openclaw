@@ -14,9 +14,12 @@ import {
   isSystemAgentOnlyCodexDynamicToolAllowlist,
   shouldDisableCodexToolSearchForModel,
 } from "./dynamic-tool-profile.js";
+import { readCodexConfigValue } from "./config-layer-policy.js";
 import {
   CODEX_OPENCLAW_DIRECT_DYNAMIC_TOOL_NAMESPACE,
+  isJsonObject,
   type CodexDynamicToolSpec,
+  type JsonObject,
 } from "./protocol.js";
 import { isCodexResponsesOAuthRun } from "./responses-oauth.js";
 
@@ -82,12 +85,27 @@ export function buildCodexConversationTurnInstructions(
   ].join("\n\n");
 }
 
+/** Codex chooses V2 first, then explicit agents.enabled=false, then model defaults. */
+function nativeCollaborationNotDisabled(config: JsonObject | undefined): boolean {
+  if (!config) {
+    return true;
+  }
+  const v2 = readCodexConfigValue(config, "features.multi_agent_v2");
+  return (
+    v2 === true ||
+    (isJsonObject(v2) && v2.enabled === true) ||
+    readCodexConfigValue(config, "agents.enabled") !== false
+  );
+}
+
 export function buildDeveloperInstructions(
   params: CodexThreadPromptContext,
   options: {
     dynamicTools?: readonly CodexDynamicToolSpec[];
     nativeCodeModeEnabled?: boolean;
     nativeCodeModeOnlyEnabled?: boolean;
+    /** Effective native configuration, after host restrictions and authored overrides. */
+    nativeCollaborationConfig?: JsonObject;
     /** The lifecycle must select a compaction-safe carrier before omitting this context. */
     omitConversationTurnContext?: boolean;
   } = {},
@@ -149,6 +167,7 @@ export function buildDeveloperInstructions(
     !isMessageOnlyCodexSourceReply(params);
   const nativeDelegationAvailable =
     delegationGuidanceAvailable &&
+    nativeCollaborationNotDisabled(options.nativeCollaborationConfig) &&
     options.nativeCodeModeEnabled !== false &&
     params.delegationCapability !== "host_only" &&
     params.pluginHarnessToolPolicyRestricted !== true &&
