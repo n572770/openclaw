@@ -134,6 +134,61 @@ function nativeClient(
 }
 
 describe("Codex native configuration", () => {
+  it.each([false, true])(
+    "normal attempt uses native-home collaboration settings (V2: %s)",
+    async (v2Enabled) => {
+      const workspaceDir = path.join(tempDir, "collaboration-normal-workspace");
+      await fs.mkdir(workspaceDir, { recursive: true });
+      const params = createParams(
+        path.join(tempDir, "collaboration-normal-attempt.jsonl"),
+        workspaceDir,
+      );
+      params.agentDir = path.join(tempDir, "collaboration-agent");
+      params.delegationCapability = "full";
+      params.toolsAllow = ["sessions_spawn"];
+      setCodexTestModelSupportsTools(params, true);
+      setCodexTestToolFactory(params, () => [createRuntimeDynamicTool("sessions_spawn")]);
+      const native = threadStartResult("native-collaboration-thread", { cwd: params.workspaceDir });
+      const transport = nativeClient(resolveCodexAppServerHomeDir(params.agentDir), {
+        "config/read": () => ({
+          config: {
+            agents: { enabled: false },
+            features: { multi_agent_v2: v2Enabled },
+          },
+          origins: {},
+          layers: [],
+        }),
+        "account/read": () => ({ account: { type: "apiKey" }, requiresOpenaiAuth: false }),
+        "thread/start": () => native,
+        "thread/read": () => ({ thread: native.thread }),
+        "thread/backgroundTerminals/list": () => ({ data: [], nextCursor: null }),
+        "turn/start": () => turnStartResult("native-collab-turn"),
+      });
+      vi.spyOn(CodexAppServerClient, "start").mockResolvedValue(transport.client);
+      ownCodexInferenceClient(transport.client);
+      const run = runCodexAppServerAttempt(params);
+      try {
+        await run.waitForTurnAccepted();
+        const start = transport.requests.find(({ method }) => method === "thread/start");
+        expect(start?.params).toMatchObject({
+          developerInstructions: expect.any(String),
+        });
+        const instructions = (start?.params as JsonObject).developerInstructions as string;
+        expect(instructions.includes("Use Codex native `spawn_agent`")).toBe(v2Enabled);
+        expect(instructions).toContain("sessions_spawn");
+        transport.send(
+          completedTurn("native-collaboration-thread", {
+            id: "native-collab-turn",
+            items: [{ type: "agentMessage", id: "answer", text: "Completed" }],
+          }),
+        );
+        await expect(run).resolves.toMatchObject({ terminal: { kind: "ok" } });
+      } finally {
+        await transport.client.closeAndWait();
+      }
+    },
+  );
+
   it.each(["missing", "disabled"])(
     "refuses required-root execution before connection when host tools are %s",
     async (state) => {
