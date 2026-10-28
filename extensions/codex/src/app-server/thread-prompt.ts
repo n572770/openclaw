@@ -9,12 +9,12 @@ import {
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { listRegisteredPluginAgentPromptGuidance } from "openclaw/plugin-sdk/plugin-runtime";
 import { asOptionalRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { readCodexConfigValue } from "./config-layer-policy.js";
 import {
   isMessageOnlyCodexSourceReply,
   isSystemAgentOnlyCodexDynamicToolAllowlist,
   shouldDisableCodexToolSearchForModel,
 } from "./dynamic-tool-profile.js";
-import { readCodexConfigValue } from "./config-layer-policy.js";
 import {
   CODEX_OPENCLAW_DIRECT_DYNAMIC_TOOL_NAMESPACE,
   isJsonObject,

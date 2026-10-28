@@ -121,10 +121,10 @@ describe("buildDeveloperInstructions native collaboration configuration", () => 
     ],
   ] as const)("matches Codex collaboration precedence (%s)", (_label, config, nativeExpected) => {
     const instructions = render({}, { nativeCollaborationConfig: config as JsonObject });
-    expect(instructions.includes("Use Codex native \`spawn_agent\`")).toBe(nativeExpected);
+    expect(instructions.includes("Use Codex native `spawn_agent`")).toBe(nativeExpected);
     expect(instructions).toContain("sessions_spawn");
     if (!nativeExpected) {
-      expect(instructions).not.toContain("native \`wait_agent\`");
+      expect(instructions).not.toContain("native `wait_agent`");
     }
   });
 
@@ -166,7 +166,7 @@ describe("buildDeveloperInstructions native collaboration configuration", () => 
       ...options,
       config: { "agents.enabled": false, "features.multi_agent_v2": { enabled: true } },
     });
-    expect(v2.developerInstructions).toContain("Use Codex native \`spawn_agent\`");
+    expect(v2.developerInstructions).toContain("Use Codex native `spawn_agent`");
   });
 });
 
