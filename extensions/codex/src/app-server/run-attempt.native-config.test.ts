@@ -33,10 +33,16 @@ import {
   itemNotification,
 } from "./native-subagent-monitor.test-support.js";
 import { buildCodexAppServerConnectionFingerprint } from "./plugin-app-cache-key.js";
-import { isJsonObject, type CodexGetAccountResponse, type JsonObject } from "./protocol.js";
+import {
+  isJsonObject,
+  type CodexDynamicToolSpec,
+  type CodexGetAccountResponse,
+  type JsonObject,
+} from "./protocol.js";
 import {
   bindProductionHarnessHostCapabilitiesForTest,
   createParams,
+  createCodexRuntimePlanFixture,
   createRuntimeDynamicTool,
   getMockRuntimeIdentity,
   mockCall,
@@ -142,10 +148,12 @@ describe("Codex native configuration", () => {
       const params = createParams(
         path.join(tempDir, "collaboration-normal-attempt.jsonl"),
         workspaceDir,
+        { sessionKey: "agent:main:main" },
       );
+      params.runtimePlan = createCodexRuntimePlanFixture();
       params.agentDir = path.join(tempDir, "collaboration-agent");
       params.delegationCapability = "full";
-      params.toolsAllow = ["sessions_spawn"];
+      // A restricted allowlist disables the entire native Code Mode surface.
       setCodexTestModelSupportsTools(params, true);
       setCodexTestToolFactory(params, () => [createRuntimeDynamicTool("sessions_spawn")]);
       const native = threadStartResult("native-collaboration-thread", { cwd: params.workspaceDir });
@@ -173,7 +181,14 @@ describe("Codex native configuration", () => {
         expect(start?.params).toMatchObject({
           developerInstructions: expect.any(String),
         });
-        const instructions = (start?.params as JsonObject).developerInstructions as string;
+        const nativeRequest = start?.params as JsonObject;
+        expect(nativeRequest.config).toMatchObject({ "features.code_mode": true });
+        const toolSpecs = nativeRequest.dynamicTools as CodexDynamicToolSpec[];
+        const offered = toolSpecs.flatMap((spec) =>
+          spec.type === "namespace" ? spec.tools.map((tool) => tool.name) : [spec.name],
+        );
+        expect(offered).toContain("sessions_spawn");
+        const instructions = nativeRequest.developerInstructions as string;
         expect(instructions.includes("Use Codex native `spawn_agent`")).toBe(v2Enabled);
         expect(instructions).toContain("sessions_spawn");
         transport.send(
