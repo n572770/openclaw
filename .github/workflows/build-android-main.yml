@@ -1,0 +1,84 @@
+name: Build OpenClaw Android 2026.11.5 Beta 1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout 11.5 beta1 rebased fork
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 10
+
+      - name: Verify upstream base and package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "bc061f935bfd79ad09e3e98c6df9f2e8f1e28bea" HEAD
+          node -e "if (require('./package.json').version !== '2026.11.5-beta.1') process.exit(1)"
+          echo "Verified OpenClaw v2026.11.5-beta.1 upstream base"
+
+      - name: Setup Node environment
+        uses: ./.github/actions/setup-node-env
+        with:
+          cache-mode: read-write
+          install-bun: "true"
+
+      - name: Setup Android toolchain
+        uses: ./.github/actions/setup-android-toolchain
+        with:
+          cache-mode: read-write
+
+      - name: Pin Android version to 2026.11.5
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --import ./scripts/tsx.mjs scripts/android-pin-version.ts --from-gateway
+          node -e "const v=require('./apps/android/version.json');if(v.version!=='2026.11.5'||v.versionCode!==2026110501)throw Error(JSON.stringify(v))"
+          cat apps/android/version.json
+
+      - name: Assemble Android debug APK
+        run: pnpm android:assemble
+
+      - name: Verify APK package and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(apps/android/app/build/outputs/apk/play/debug/*.apk)
+          test "${#apks[@]}" -gt 0
+          mkdir -p apk-output
+          for apk in "${apks[@]}"; do
+            "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$apk" | grep "^package: name='ai.openclaw.app.debug' "
+            "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$apk" | grep "versionCode='2026110501'"
+            sha256sum "$apk" | tee -a apk-output/SHA256SUMS.txt
+            ls -lh "$apk"
+          done
+
+      - name: Verify APK signature and alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for apk in apps/android/app/build/outputs/apk/play/debug/*.apk; do
+            "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+            "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" -c -p 4 "$apk"
+          done
+
+      - name: Upload versioned APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenClaw-Android-2026.11.5-beta.1
+          path: |
+            apps/android/app/build/outputs/apk/play/debug/*.apk
+            apk-output/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
